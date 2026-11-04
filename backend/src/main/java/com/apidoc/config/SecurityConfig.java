@@ -3,6 +3,7 @@ package com.apidoc.config;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -10,6 +11,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -20,7 +22,7 @@ import java.util.List;
 
 /**
  * 安全配置
- * 使用匿名认证模式，由业务层判断是否需要真正的用户登录
+ * 业务 API 默认要求认证，仅认证、API 文档等非业务入口允许匿名访问
  */
 @Configuration
 @EnableWebSecurity
@@ -42,14 +44,16 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> auth
-                        // 公开接口 - 无需认证
+                        // 认证接口 - 无需认证
                         .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
+                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html", "/api-docs/**").permitAll()
                         .requestMatchers("/error").permitAll()
-                        // 导出接口需要认证（暂时允许匿名通过）
-                        .requestMatchers("/api/export/**").permitAll()
-                        // 所有API请求都允许通过，由Controller层判断
-                        .requestMatchers("/api/**").permitAll()
+                        // 其余请求（含全部业务 API）必须认证
+                        .anyRequest().authenticated()
+                )
+                // 未认证请求返回 401，而不是默认的 403
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
                 );
 
         return http.build();

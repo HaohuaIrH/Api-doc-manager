@@ -23,7 +23,8 @@ import java.util.Collections;
 
 /**
  * JWT认证过滤器
- * 支持无token请求通过，由业务层判断是否需要认证
+ * 仅在携带有效JWT且用户存在并启用时建立认证；其余请求保持未认证，
+ * 由SecurityConfig的 authenticated() 规则拒绝（401），不再降级为匿名放行
  */
 @Component
 @RequiredArgsConstructor
@@ -42,11 +43,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         // 清除上一次的ThreadLocal数据
         SecurityContextHelper.clear();
-
-        // 创建匿名认证，允许请求通过但不带用户信息
-        UsernamePasswordAuthenticationToken anonymousToken =
-            new UsernamePasswordAuthenticationToken("anonymous", null, Collections.emptyList());
-        SecurityContextHolder.getContext().setAuthentication(anonymousToken);
 
         final String authHeader = request.getHeader("Authorization");
 
@@ -82,24 +78,27 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                             log.info("User {} authenticated successfully, userId={}", username, user.getId());
                         } else {
-                            log.warn("User {} is disabled", username);
+                            log.warn("User {} is disabled, request stays unauthenticated", username);
                         }
                     });
                 }
 
             } catch (Exception e) {
-                log.error("JWT authentication error: {}", e.getMessage());
+                // 无效/过期JWT：不降级为匿名，保持未认证，由authenticated()规则返回401
+                log.warn("Invalid JWT token, request stays unauthenticated: {}", e.getMessage());
+                SecurityContextHolder.clearContext();
             }
         } else {
-            log.debug("No Bearer token found in request, using anonymous authentication");
+            log.debug("No Bearer token found in request, request stays unauthenticated");
         }
 
-        // 继续处理请求（匿名用户会通过SecurityConfig，但在Controller中会被拒绝）
+        // 继续处理请求（未认证请求会被SecurityConfig拒绝）
         try {
             filterChain.doFilter(request, response);
         } finally {
-            // 请求结束后清除ThreadLocal
+            // 请求结束后清除ThreadLocal与安全上下文，避免线程复用串号
             SecurityContextHelper.clear();
+            SecurityContextHolder.clearContext();
         }
     }
 }

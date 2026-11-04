@@ -7,6 +7,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -61,6 +63,8 @@ public class GlobalParameterController {
     public ResponseEntity<GlobalParameterDTO> create(@RequestBody GlobalParameterDTO dto) {
         try {
             return ResponseEntity.ok(parameterService.create(dto));
+        } catch (AccessDeniedException | AuthenticationCredentialsNotFoundException e) {
+            throw e;
         } catch (RuntimeException e) {
             log.error("创建参数失败", e);
             return ResponseEntity.badRequest().build();
@@ -72,6 +76,8 @@ public class GlobalParameterController {
     public ResponseEntity<GlobalParameterDTO> update(@PathVariable Long id, @RequestBody GlobalParameterDTO dto) {
         try {
             return ResponseEntity.ok(parameterService.update(id, dto));
+        } catch (AccessDeniedException | AuthenticationCredentialsNotFoundException e) {
+            throw e;
         } catch (RuntimeException e) {
             log.error("更新参数失败", e);
             return ResponseEntity.badRequest().build();
@@ -84,6 +90,8 @@ public class GlobalParameterController {
         try {
             parameterService.delete(id);
             return ResponseEntity.ok().build();
+        } catch (AccessDeniedException | AuthenticationCredentialsNotFoundException e) {
+            throw e;
         } catch (RuntimeException e) {
             log.error("删除参数失败", e);
             return ResponseEntity.badRequest().build();

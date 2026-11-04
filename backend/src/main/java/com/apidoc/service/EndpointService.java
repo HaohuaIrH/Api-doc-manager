@@ -7,10 +7,13 @@ import com.apidoc.entity.ApiParameter;
 import com.apidoc.repository.ApiDocumentRepository;
 import com.apidoc.repository.ApiEndpointRepository;
 import com.apidoc.repository.ApiParameterRepository;
+import com.apidoc.security.AccessControlService;
+import com.apidoc.security.SecurityContextHelper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,9 +30,15 @@ public class EndpointService {
     private final ApiEndpointRepository endpointRepository;
     private final ApiDocumentRepository documentRepository;
     private final ApiParameterRepository parameterRepository;
+    private final AccessControlService accessControlService;
     private final ObjectMapper objectMapper;
 
     public List<EndpointDTO> findByDocumentId(Long documentId) {
+        Long currentUserId = SecurityContextHelper.getCurrentUserId();
+        if (currentUserId == null || !accessControlService.canReadDocument(documentId, currentUserId)) {
+            return List.of();
+        }
+
         List<ApiEndpoint> endpoints = endpointRepository.findByDocumentId(documentId);
         return endpoints.stream()
                 .map(this::toDTOWithParams)
@@ -37,6 +46,11 @@ public class EndpointService {
     }
 
     public EndpointDTO findById(Long id) {
+        Long currentUserId = SecurityContextHelper.getCurrentUserId();
+        if (currentUserId == null || !accessControlService.canReadEndpoint(id, currentUserId)) {
+            return null;
+        }
+
         return endpointRepository.findById(id)
                 .map(this::toDTOWithParams)
                 .orElse(null);
@@ -50,6 +64,9 @@ public class EndpointService {
         Long documentId = Long.valueOf(request.get("documentId").toString());
         ApiDocument document = documentRepository.findById(documentId)
                 .orElseThrow(() -> new RuntimeException("Document not found: " + documentId));
+
+        // 仅项目属主可在文档下创建端点
+        accessControlService.requireDocumentOwnership(documentId);
 
         String path = (String) request.get("path");
         String methodStr = (String) request.get("method");
@@ -94,6 +111,9 @@ public class EndpointService {
         ApiEndpoint endpoint = endpointRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Endpoint not found: " + id));
 
+        // 仅项目属主可修改端点
+        accessControlService.requireEndpointOwnership(id);
+
         if (request.get("path") != null) {
             endpoint.setPath((String) request.get("path"));
         }
@@ -122,7 +142,13 @@ public class EndpointService {
 
     @Transactional
     public void delete(Long id) {
-        endpointRepository.deleteById(id);
+        ApiEndpoint endpoint = endpointRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Endpoint not found: " + id));
+
+        // 仅项目属主可删除端点
+        accessControlService.requireEndpointOwnership(id);
+
+        endpointRepository.delete(endpoint);
     }
 
     /**
@@ -131,6 +157,11 @@ public class EndpointService {
     public Map<String, Object> testEndpoint(Long id, Map<String, Object> params) {
         ApiEndpoint endpoint = endpointRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Endpoint not found: " + id));
+
+        Long currentUserId = SecurityContextHelper.getCurrentUserId();
+        if (currentUserId == null || !accessControlService.canReadEndpoint(id, currentUserId)) {
+            throw new AccessDeniedException("无权访问该端点");
+        }
 
         log.info("Testing endpoint: {} {} with params: {}", endpoint.getMethod(), endpoint.getPath(), params);
 

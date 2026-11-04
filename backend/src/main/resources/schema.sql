@@ -392,6 +392,7 @@ DROP TABLE IF EXISTS global_parameters;
 CREATE TABLE global_parameters (
     id              BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '参数ID',
     tenant_id       BIGINT NOT NULL DEFAULT 1 COMMENT '租户ID',
+    owner_id        BIGINT NULL COMMENT '属主用户ID（创建者），仅属主可改/删；历史数据可为空',
     name            VARCHAR(100) NOT NULL UNIQUE COMMENT '参数名称',
     data_type       VARCHAR(50) NOT NULL COMMENT '数据类型: STRING/INTEGER/LONG/DOUBLE/BOOLEAN/ARRAY/OBJECT',
     example_value   TEXT COMMENT '示例值',
@@ -401,6 +402,7 @@ CREATE TABLE global_parameters (
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_tenant_id (tenant_id),
+    INDEX idx_owner_id (owner_id),
     INDEX idx_parent_id (parent_id),
     INDEX idx_name (name),
     INDEX idx_data_type (data_type)
@@ -410,4 +412,5 @@ CREATE TABLE global_parameters (
 -- 外键约束
 -- =====================================================
 ALTER TABLE global_parameters ADD CONSTRAINT fk_global_params_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id);
+ALTER TABLE global_parameters ADD CONSTRAINT fk_global_params_owner FOREIGN KEY (owner_id) REFERENCES users(id);
 ALTER TABLE global_parameters ADD CONSTRAINT fk_global_params_parent FOREIGN KEY (parent_id) REFERENCES global_parameters(id) ON DELETE CASCADE;
