@@ -30,6 +30,15 @@ public class GlobalParameter {
     @Column(nullable = false, length = 100, unique = true)
     private String name;
 
+    /**
+     * 属主用户：创建该参数的用户；仅属主可修改/删除。
+     * 历史数据该列可能为空（属主未知的遗留参数，保持任何已认证用户可管理）。
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "owner_id")
+    @JsonIgnoreProperties({"password", "email", "hibernateLazyInitializer", "handler"})
+    private User owner;
+
     @Column(name = "data_type", nullable = false, length = 50)
     @Enumerated(EnumType.STRING)
     private ParameterType dataType;

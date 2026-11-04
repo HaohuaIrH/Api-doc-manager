@@ -1,7 +1,11 @@
 package com.apidoc.controller;
 
+import com.apidoc.entity.ApiEndpoint;
 import com.apidoc.entity.ApiResponse;
+import com.apidoc.repository.ApiEndpointRepository;
 import com.apidoc.repository.ApiResponseRepository;
+import com.apidoc.security.AccessControlService;
+import com.apidoc.security.SecurityContextHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -18,9 +22,15 @@ import java.util.Map;
 public class ResponseController {
 
     private final ApiResponseRepository responseRepository;
+    private final ApiEndpointRepository endpointRepository;
+    private final AccessControlService accessControlService;
 
     @GetMapping("/endpoint/{endpointId}")
     public ResponseEntity<List<ApiResponse>> listByEndpoint(@PathVariable Long endpointId) {
+        Long currentUserId = SecurityContextHelper.getCurrentUserId();
+        if (currentUserId == null || !accessControlService.canReadEndpoint(endpointId, currentUserId)) {
+            return ResponseEntity.ok(List.of());
+        }
         return ResponseEntity.ok(responseRepository.findByEndpointId(endpointId));
     }
 
@@ -28,7 +38,18 @@ public class ResponseController {
     public ResponseEntity<ApiResponse> create(@RequestBody Map<String, Object> request) {
         log.info("Creating response: {}", request);
 
+        if (request.get("endpointId") == null) {
+            throw new RuntimeException("endpointId is required");
+        }
+        Long endpointId = Long.valueOf(request.get("endpointId").toString());
+        ApiEndpoint endpoint = endpointRepository.findById(endpointId)
+                .orElseThrow(() -> new RuntimeException("Endpoint not found: " + endpointId));
+
+        // 仅项目属主可在端点下创建响应定义
+        accessControlService.requireEndpointOwnership(endpointId);
+
         ApiResponse response = new ApiResponse();
+        response.setEndpoint(endpoint);
         response.setStatusCode((String) request.get("statusCode"));
         response.setDescription((String) request.get("description"));
         response.setContentType((String) request.getOrDefault("contentType", "application/json"));
@@ -59,6 +80,9 @@ public class ResponseController {
     public ResponseEntity<ApiResponse> update(@PathVariable Long id, @RequestBody Map<String, Object> request) {
         return responseRepository.findById(id)
                 .map(existing -> {
+                    // 仅项目属主可修改响应定义
+                    accessControlService.requireResponseOwnership(id);
+
                     if (request.get("statusCode") != null) {
                         existing.setStatusCode((String) request.get("statusCode"));
                     }
@@ -78,6 +102,13 @@ public class ResponseController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
+        if (responseRepository.findById(id).isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        // 仅项目属主可删除响应定义
+        accessControlService.requireResponseOwnership(id);
+
         responseRepository.deleteById(id);
         return ResponseEntity.ok().build();
     }

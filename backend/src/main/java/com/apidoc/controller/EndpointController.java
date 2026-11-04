@@ -5,6 +5,8 @@ import com.apidoc.service.EndpointService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -58,6 +60,8 @@ public class EndpointController {
         try {
             EndpointDTO created = endpointService.create(request);
             return ResponseEntity.ok(created);
+        } catch (AccessDeniedException | AuthenticationCredentialsNotFoundException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Error creating endpoint: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -72,6 +76,8 @@ public class EndpointController {
         try {
             EndpointDTO updated = endpointService.update(id, request);
             return ResponseEntity.ok(updated);
+        } catch (AccessDeniedException | AuthenticationCredentialsNotFoundException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Error updating endpoint: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -96,6 +102,8 @@ public class EndpointController {
         try {
             Map<String, Object> result = endpointService.testEndpoint(id, params);
             return ResponseEntity.ok(result);
+        } catch (AccessDeniedException | AuthenticationCredentialsNotFoundException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Error testing endpoint: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

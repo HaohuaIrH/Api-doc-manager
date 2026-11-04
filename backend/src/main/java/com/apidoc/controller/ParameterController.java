@@ -4,11 +4,15 @@ import com.apidoc.entity.ApiEndpoint;
 import com.apidoc.entity.ApiParameter;
 import com.apidoc.repository.ApiEndpointRepository;
 import com.apidoc.repository.ApiParameterRepository;
+import com.apidoc.security.AccessControlService;
+import com.apidoc.security.SecurityContextHelper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -24,10 +28,15 @@ public class ParameterController {
 
     private final ApiParameterRepository parameterRepository;
     private final ApiEndpointRepository endpointRepository;
+    private final AccessControlService accessControlService;
     private final ObjectMapper objectMapper;
 
     @GetMapping("/endpoint/{endpointId}")
     public ResponseEntity<List<ApiParameter>> listByEndpoint(@PathVariable Long endpointId) {
+        Long currentUserId = SecurityContextHelper.getCurrentUserId();
+        if (currentUserId == null || !accessControlService.canReadEndpoint(endpointId, currentUserId)) {
+            return ResponseEntity.ok(List.of());
+        }
         return ResponseEntity.ok(parameterRepository.findByEndpointId(endpointId));
     }
 
@@ -37,6 +46,9 @@ public class ParameterController {
             Long endpointId = Long.valueOf(request.get("endpointId").toString());
             ApiEndpoint endpoint = endpointRepository.findById(endpointId)
                     .orElseThrow(() -> new RuntimeException("Endpoint not found: " + endpointId));
+
+            // 仅项目属主可在端点下创建参数
+            accessControlService.requireEndpointOwnership(endpointId);
 
             ApiParameter param = new ApiParameter();
             param.setEndpoint(endpoint);
@@ -76,6 +88,8 @@ public class ParameterController {
             }
 
             return ResponseEntity.ok(parameterRepository.save(param));
+        } catch (AccessDeniedException | AuthenticationCredentialsNotFoundException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Error creating parameter: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -86,6 +100,9 @@ public class ParameterController {
     public ResponseEntity<?> update(@PathVariable Long id, @RequestBody Map<String, Object> request) {
         return parameterRepository.findById(id)
                 .map(existing -> {
+                    // 仅项目属主可修改参数
+                    accessControlService.requireParameterOwnership(id);
+
                     if (request.get("type") != null || request.get("location") != null) {
                         String locationStr = (String) request.getOrDefault("type", request.get("location"));
                         if (locationStr != null) {
@@ -111,6 +128,13 @@ public class ParameterController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
+        if (parameterRepository.findById(id).isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        // 仅项目属主可删除参数
+        accessControlService.requireParameterOwnership(id);
+
         parameterRepository.deleteById(id);
         return ResponseEntity.ok().build();
     }
