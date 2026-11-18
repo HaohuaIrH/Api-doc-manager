@@ -8,6 +8,8 @@
     "build": "vite build",
     "build:prod": "vite build",
     "lint": "eslint .",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "typecheck": "tsc -p tsconfig.app.json && tsc -p tsconfig.node.json",
     "preview": "vite preview",
     "install-deps": "pnpm install",
     "clean": "rimraf node_modules .pnpm-store pnpm-lock.yaml"
